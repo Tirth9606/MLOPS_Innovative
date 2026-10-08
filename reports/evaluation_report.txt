@@ -1,0 +1,23 @@
+Student Performance Model - Evaluation Report
+==================================================
+
+Accuracy : 0.840
+Precision: 0.866
+Recall   : 0.866
+F1-score : 0.866
+
+Confusion matrix (rows=actual, cols=predicted):
+           pred_FAIL  pred_PASS
+  FAIL            65         16
+  PASS            16        103
+
+Classification report:
+              precision    recall  f1-score   support
+
+        FAIL       0.80      0.80      0.80        81
+        PASS       0.87      0.87      0.87       119
+
+    accuracy                           0.84       200
+   macro avg       0.83      0.83      0.83       200
+weighted avg       0.84      0.84      0.84       200
+

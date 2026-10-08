@@ -1,0 +1,22 @@
+{
+  "accuracy": 0.84,
+  "precision_pass": 0.8655,
+  "recall_pass": 0.8655,
+  "f1_pass": 0.8655,
+  "confusion_matrix": {
+    "labels": [
+      "FAIL",
+      "PASS"
+    ],
+    "matrix": [
+      [
+        65,
+        16
+      ],
+      [
+        16,
+        103
+      ]
+    ]
+  }
+}

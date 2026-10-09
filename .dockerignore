@@ -1,0 +1,13 @@
+# Keep the build context small — only src/, api/, models/ are needed.
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/
+reports/
+mlruns/
+mlartifacts/
+mlflow.db
+.git/
+.gitignore
+*.md

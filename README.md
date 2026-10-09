@@ -7,8 +7,9 @@ Implemented phase by phase:
 
 - **Phase 1 (done):** core ML pipeline — synthetic data, preprocessing, Random Forest training, evaluation, single-student prediction.
 - **Phase 2 (done):** MLflow experiment tracking & model versioning (local, no cloud).
+- **Phase 3 (done):** model serving with a FastAPI REST API, containerized with Docker.
 
-> FastAPI, Docker, Evidently, Streamlit, GitHub Actions and automated retraining are **not** implemented yet — those belong to later phases.
+> Evidently, drift detection, automated retraining, Streamlit and GitHub Actions are **not** implemented yet — those belong to later phases.
 
 ## Problem
 
@@ -54,11 +55,16 @@ student-mlops/
 │   ├── data_preprocessing.py     # load / validate / split
 │   ├── train.py                  # train + MLflow tracking + save model
 │   ├── evaluate.py               # metrics + reports
-│   └── predict.py                # single-student prediction
+│   └── predict.py                # single-student prediction (reused by the API)
+├── api/
+│   ├── app.py                    # FastAPI serving app
+│   └── requirements.txt          # slim serving deps (used by Docker)
 ├── models/                       # saved model (student_model.pkl)
 ├── reports/                      # metrics.json + evaluation_report.txt
 ├── mlflow.db                     # local MLflow tracking store (SQLite, auto-created)
 ├── mlartifacts/                  # local MLflow model artifacts (auto-created)
+├── Dockerfile                    # container build for the API
+├── docker-compose.yml            # one-service compose for the API
 ├── requirements.txt
 ├── README.md
 └── .gitignore
@@ -174,6 +180,103 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
   model is still logged as a **run artifact** (visible under a run's *Artifacts* tab),
   and `train.py` prints a note saying so.
 
+---
+
+## Phase 3 — Model serving with FastAPI + Docker
+
+The trained model is exposed through a small **REST API** ([api/app.py](api/app.py)) and
+packaged into a **Docker** container. The API reuses the exact same prediction helper as
+the CLI (`src/predict.py`), so the feature ordering applied at serving time matches
+training — there is no training/serving mismatch.
+
+### Endpoints
+
+| Method & path | Purpose |
+|---------------|---------|
+| `GET /health`  | Returns API status, whether the model is loaded, and the model version (if available). |
+| `POST /predict`| Takes one student's 7 features (validated by Pydantic) and returns `{prediction, probability}`. |
+
+**Example request body** (`POST /predict`):
+
+```json
+{
+  "study_hours": 6,
+  "attendance": 87,
+  "previous_marks": 72,
+  "assignment_score": 81,
+  "internal_score": 76,
+  "sleep_hours": 7,
+  "participation": 8
+}
+```
+
+**Example response:**
+
+```json
+{ "prediction": "PASS", "probability": 0.99 }
+```
+
+Invalid input (missing field, or a value out of range such as `attendance: 150`) is
+rejected automatically with **HTTP 422** and a clear validation message.
+
+### Run the API locally
+
+```bash
+# 1. Install dependencies (from the project root)
+pip install -r requirements.txt
+
+# 2. Start the API (serves on port 8000)
+uvicorn api.app:app --reload --port 8000
+```
+
+- **Swagger UI (interactive docs):** <http://127.0.0.1:8000/docs>
+- **Health endpoint:** <http://127.0.0.1:8000/health>
+- **Prediction endpoint:** `POST http://127.0.0.1:8000/predict`
+
+Test it:
+
+```bash
+# Health
+curl http://127.0.0.1:8000/health
+
+# Predict
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"study_hours":6,"attendance":87,"previous_marks":72,"assignment_score":81,"internal_score":76,"sleep_hours":7,"participation":8}'
+```
+
+### Run with Docker
+
+```bash
+# Build the image (run from the project root)
+docker build -t student-performance-api .
+
+# Run the container (maps container port 8000 -> host port 8000)
+docker run -p 8000:8000 student-performance-api
+```
+
+Then access the API exactly as above: <http://127.0.0.1:8000/docs>, `/health`, `/predict`.
+
+Or with Docker Compose:
+
+```bash
+docker compose up --build
+# stop with: docker compose down
+```
+
+Test the prediction against the container (same `curl` as the local example):
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"study_hours":6,"attendance":87,"previous_marks":72,"assignment_score":81,"internal_score":76,"sleep_hours":7,"participation":8}'
+```
+
+> The Docker image installs only the slim serving dependencies in
+> [api/requirements.txt](api/requirements.txt) (no MLflow), so it stays small. The
+> `model_version` field in `/health` is populated only when the local MLflow database
+> is present (local runs), and is `null` inside the minimal container — both are valid.
+
 ## Notes
 
 - All paths are resolved relative to the project root — no hard-coded absolute paths.
@@ -181,3 +284,4 @@ mlflow ui --backend-store-uri sqlite:///mlflow.db
 - All random operations use `random_state=42` for reproducible results.
 - Phase 1 scripts (`evaluate.py`, `predict.py`) are unchanged and still read the
   `.pkl` model, so the core pipeline works with or without the MLflow UI running.
+- The API reuses `src/predict.py`, so serving and training use identical preprocessing.

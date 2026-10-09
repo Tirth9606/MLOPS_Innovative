@@ -1,0 +1,9 @@
+# Simple one-service compose file for the student-performance API.
+# Usage:  docker compose up --build   then open http://localhost:8000/docs
+services:
+  api:
+    build: .
+    container_name: student-performance-api
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
